@@ -27,6 +27,28 @@ The CAN controller supports:
 - Onboard 120-ohm termination resistor (removable via jumper)
 - 3.5mm terminal block for CAN High, CAN Low, and GND connections
 
+### RS03Motor Library
+
+The project includes a custom library for controlling RS03 motors via CAN bus. This library provides a comprehensive interface for all control modes of the RS03 motor system.
+
+Features of the RS03Motor library:
+- Support for all control modes of the RS03 motors:
+  - Position control (CSP mode)
+  - Position control with trajectory planning (PP mode)
+  - Velocity control
+  - Current (torque) control
+  - Operation control mode with advanced parameters
+- Detailed error handling and fault reporting
+- Multiple motor synchronization capabilities
+- Test functions for motor evaluation
+- Easy-to-use API with Arduino compatibility
+
+The library depends on the [MCP2515 Library](https://github.com/autowp/arduino-mcp2515) for CAN communication and provides a convenient abstraction layer for motor control operations.
+
+Example usage is provided in the `/examples` directory, including:
+- Basic motor testing (RS03Motor_Test)
+- Controlling multiple motors with synchronized patterns (RS03MultiMotor)
+
 ## Pinouts
 
 ### CAN Controller Pins
