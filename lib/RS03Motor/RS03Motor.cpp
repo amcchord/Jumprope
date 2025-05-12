@@ -8,7 +8,7 @@
 #include "RS03Motor.h"
 
 // Constructor
-RS03Motor::RS03Motor(MCP2515 &mcp2515_instance, uint8_t motor_id, uint8_t master_id)
+RS03Motor::RS03Motor(Adafruit_MCP2515 &mcp2515_instance, uint8_t motor_id, uint8_t master_id)
     : mcp2515(mcp2515_instance), motor_id(motor_id), master_id(master_id), is_enabled(false),
       current_mode(MODE_OPERATION), last_feedback(0), waiting_for_response(false),
       last_param_read(0), param_response(0) {
@@ -263,8 +263,8 @@ bool RS03Motor::readParameter(uint16_t param_index, float *value) {
     unsigned long start_time = millis();
     while (waiting_for_response && (millis() - start_time < 500)) {
         struct can_frame frame;
-        if (mcp2515.readMessage(&frame) == MCP2515::ERROR_OK) {
-            processCANMessage(frame);
+        if (processCANMessage(frame)) {
+            // Message was processed
         }
         delay(1);
     }
@@ -294,47 +294,14 @@ bool RS03Motor::writeParameter(uint16_t param_index, float value) {
 
 // Process received CAN message
 bool RS03Motor::processCANMessage(struct can_frame &frame) {
-    // Check if this is an extended frame
-    if (!(frame.can_id & CAN_EFF_FLAG)) {
-        return false;
+    if (mcp2515.parsePacket()) {
+        frame.can_id = mcp2515.packetId();
+        frame.can_dlc = mcp2515.available();
+        for (int i = 0; i < frame.can_dlc && i < 8; i++) {
+            frame.data[i] = mcp2515.read();
+        }
+        return true;
     }
-    
-    // Get the actual ID without flags
-    uint32_t id = frame.can_id & CAN_EFF_MASK;
-    
-    // Extract communication type (bits 24-28)
-    uint8_t comm_type = (id >> 24) & 0x1F;
-    
-    // Extract destination address (bits 0-7)
-    uint8_t dest_addr = id & 0xFF;
-    
-    // Check if this message is for our master ID
-    if (dest_addr != master_id && dest_addr != 0xFE) {
-        return false;
-    }
-    
-    // Process based on communication type
-    switch (comm_type) {
-        case COMM_MOTOR_FEEDBACK:
-            handleMotorFeedback(frame);
-            return true;
-            
-        case COMM_READ_PARAM:
-            if (waiting_for_response) {
-                handleParameterResponse(frame);
-                return true;
-            }
-            break;
-            
-        case COMM_FAULT_FEEDBACK:
-            handleFaultFeedback(frame);
-            return true;
-            
-        default:
-            // Ignore other message types
-            break;
-    }
-    
     return false;
 }
 
@@ -416,8 +383,8 @@ bool RS03Motor::testPositionControl(float position) {
     
     while (abs(position_error) > 0.05 && (millis() - start_time < 5000)) {
         struct can_frame frame;
-        if (mcp2515.readMessage(&frame) == MCP2515::ERROR_OK) {
-            processCANMessage(frame);
+        if (processCANMessage(frame)) {
+            // Message was processed
         }
         
         position_error = position - feedback.position;
@@ -453,8 +420,8 @@ bool RS03Motor::testVelocityControl(float velocity, uint32_t duration_ms) {
     
     while ((millis() - start_time < duration_ms)) {
         struct can_frame frame;
-        if (mcp2515.readMessage(&frame) == MCP2515::ERROR_OK) {
-            processCANMessage(frame);
+        if (processCANMessage(frame)) {
+            // Message was processed
         }
         
         // Check for faults
@@ -504,8 +471,8 @@ bool RS03Motor::testSinusoidalMovement(float amplitude, float frequency, uint32_
         
         // Process incoming messages
         struct can_frame frame;
-        if (mcp2515.readMessage(&frame) == MCP2515::ERROR_OK) {
-            processCANMessage(frame);
+        if (processCANMessage(frame)) {
+            // Message was processed
         }
         
         // Check for faults
@@ -560,19 +527,15 @@ uint32_t RS03Motor::createExtendedId(uint8_t comm_type, uint8_t dest_id, uint16_
 
 // Send a CAN message
 bool RS03Motor::sendCANMessage(uint8_t comm_type, uint8_t dest_id, uint8_t *data, uint8_t length, uint16_t data2) {
-    struct can_frame frame;
+    uint32_t extended_id = createExtendedId(comm_type, dest_id, data2);
     
-    // Set extended ID
-    frame.can_id = createExtendedId(comm_type, dest_id, data2) | CAN_EFF_FLAG;
-    
-    // Set data length
-    frame.can_dlc = length > 8 ? 8 : length;
-    
-    // Copy data
-    memcpy(frame.data, data, frame.can_dlc);
-    
-    // Send message
-    return (mcp2515.sendMessage(&frame) == MCP2515::ERROR_OK);
+    if (mcp2515.beginPacket(extended_id)) {
+        for (int i = 0; i < length; i++) {
+            mcp2515.write(data[i]);
+        }
+        return mcp2515.endPacket();
+    }
+    return false;
 }
 
 // Update fault information based on status
@@ -601,7 +564,7 @@ void RS03Motor::updateFaultFromStatus(uint8_t status) {
 // Handle motor feedback message
 void RS03Motor::handleMotorFeedback(struct can_frame &frame) {
     // Extract motor ID
-    uint32_t id = frame.can_id & CAN_EFF_MASK;
+    uint32_t id = frame.can_id;
     uint8_t motor_id_from_msg = (id >> 16) & 0xFF;
     
     // Check if this feedback is from our motor

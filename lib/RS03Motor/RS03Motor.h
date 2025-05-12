@@ -9,7 +9,7 @@
 #define RS03MOTOR_H
 
 #include <Arduino.h>
-#include <mcp2515.h>
+#include <Adafruit_MCP2515.h>
 
 // Constants for value mapping
 #define P_MIN -12.57f
@@ -71,6 +71,13 @@
 #define COMM_SET_BAUDRATE 0x17
 #define COMM_ACTIVE_REPORTING 0x18
 
+// CAN frame structure
+struct can_frame {
+    uint32_t can_id;  // 32 bit CAN_ID
+    uint8_t can_dlc;  // frame payload length in byte
+    uint8_t data[8];  // payload
+};
+
 /**
  * @brief Struct to hold motor feedback data
  */
@@ -104,11 +111,11 @@ class RS03Motor {
 public:
     /**
      * @brief Constructor
-     * @param mcp2515_instance Reference to MCP2515 instance
+     * @param mcp2515_instance Reference to Adafruit_MCP2515 instance
      * @param motor_id Motor CAN ID
      * @param master_id Master device CAN ID
      */
-    RS03Motor(MCP2515 &mcp2515_instance, uint8_t motor_id = 1, uint8_t master_id = 0);
+    RS03Motor(Adafruit_MCP2515 &mcp2515_instance, uint8_t motor_id = 1, uint8_t master_id = 0);
 
     /**
      * @brief Initialize the motor
@@ -304,7 +311,7 @@ public:
     bool testSinusoidalMovement(float amplitude, float frequency, uint32_t duration_ms);
 
 private:
-    MCP2515 &mcp2515;              // MCP2515 CAN controller instance
+    Adafruit_MCP2515 &mcp2515;              // MCP2515 CAN controller instance
     uint8_t motor_id;              // Motor CAN ID
     uint8_t master_id;             // Master device CAN ID
     bool is_enabled;               // Flag to track if motor is enabled
